@@ -1,0 +1,10 @@
+node_modules
+.replit
+.local
+attached_assets
+artifacts/api-server/dist/index.mjs
+artifacts/api-server/dist/index.mjs.map
+artifacts/api-server/dist/pino-worker.mjs
+artifacts/api-server/dist/pino-file.mjs
+artifacts/api-server/dist/pino-pretty.mjs
+artifacts/api-server/dist/thread-stream-worker.mjs
