@@ -1,22 +1,38 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: eSIM reseller platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: packages
+    description: eSIM package operations
+  - name: esim
+    description: eSIM order and management
+  - name: wallet
+    description: Wallet and payment operations
+  - name: user
+    description: User profile and settings
+  - name: family
+    description: Family member management
+  - name: admin
+    description: Admin operations
+  - name: referral
+    description: Referral system
+  - name: tickets
+    description: Support tickets
+  - name: redeem
+    description: Redeem code operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +40,618 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /packages:
+    get:
+      operationId: listPackages
+      tags: [packages]
+      summary: List available eSIM packages with markup
+      parameters:
+        - in: query
+          name: locationCode
+          schema:
+            type: string
+          description: Country code filter (empty for all)
+        - in: query
+          name: duration
+          schema:
+            type: string
+            enum: ["7", "15", "30"]
+          description: Duration filter in days
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [price_asc, gb_asc, value_desc]
+      responses:
+        "200":
+          description: Package list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Package"
+
+  /packages/countries:
+    get:
+      operationId: listCountries
+      tags: [packages]
+      summary: List all available countries with packages
+      responses:
+        "200":
+          description: Country list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Country"
+
+  /esim/order:
+    post:
+      operationId: createOrder
+      tags: [esim]
+      summary: Purchase an eSIM package using wallet balance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderInput"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          description: Insufficient balance or invalid package
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /esim/orders:
+    get:
+      operationId: listOrders
+      tags: [esim]
+      summary: List user's eSIM orders
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, active, expired, all]
+        - in: query
+          name: familyMemberId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+
+  /esim/orders/{orderNo}:
+    get:
+      operationId: getOrder
+      tags: [esim]
+      summary: Get order details with QR code
+      parameters:
+        - in: path
+          name: orderNo
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /esim/status-check:
+    post:
+      operationId: checkEsimStatus
+      tags: [esim]
+      summary: Check and refresh status of pending eSIMs
+      responses:
+        "200":
+          description: Updated statuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+
+  /esim/topup:
+    post:
+      operationId: topupEsim
+      tags: [esim]
+      summary: Top up an existing eSIM with a data package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TopupInput"
+      responses:
+        "200":
+          description: Topup successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /esim/manage:
+    post:
+      operationId: manageEsim
+      tags: [esim]
+      summary: Suspend, unsuspend, or revoke an eSIM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManageEsimInput"
+      responses:
+        "200":
+          description: Action successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericSuccess"
+
+  /esim/summary:
+    get:
+      operationId: getEsimSummary
+      tags: [esim]
+      summary: Get eSIM summary stats for current user
+      responses:
+        "200":
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EsimSummary"
+
+  /wallet:
+    get:
+      operationId: getWallet
+      tags: [wallet]
+      summary: Get current user wallet balance and level info
+      responses:
+        "200":
+          description: Wallet info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+
+  /wallet/transactions:
+    get:
+      operationId: listTransactions
+      tags: [wallet]
+      summary: List wallet transactions
+      responses:
+        "200":
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+
+  /wallet/topup-options:
+    get:
+      operationId: getTopupOptions
+      tags: [wallet]
+      summary: Get Paddle topup options and checkout URLs
+      responses:
+        "200":
+          description: Topup options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopupOptions"
+
+  /webhooks/paddle:
+    post:
+      operationId: paddleWebhook
+      tags: [wallet]
+      summary: Paddle payment webhook endpoint
+      responses:
+        "200":
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericSuccess"
+
+  /user/profile:
+    get:
+      operationId: getProfile
+      tags: [user]
+      summary: Get user profile
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+    patch:
+      operationId: updateProfile
+      tags: [user]
+      summary: Update user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /user/badges:
+    get:
+      operationId: getUserBadges
+      tags: [user]
+      summary: Get user badges and achievements
+      responses:
+        "200":
+          description: Badge list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Badge"
+
+  /family:
+    get:
+      operationId: listFamilyMembers
+      tags: [family]
+      summary: List family members
+      responses:
+        "200":
+          description: Family member list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FamilyMember"
+    post:
+      operationId: createFamilyMember
+      tags: [family]
+      summary: Create a family member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FamilyMemberInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FamilyMember"
+
+  /family/{memberId}:
+    patch:
+      operationId: updateFamilyMember
+      tags: [family]
+      summary: Update a family member
+      parameters:
+        - in: path
+          name: memberId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FamilyMemberUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FamilyMember"
+    delete:
+      operationId: deleteFamilyMember
+      tags: [family]
+      summary: Delete a family member
+      parameters:
+        - in: path
+          name: memberId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericSuccess"
+
+  /referral:
+    get:
+      operationId: getReferral
+      tags: [referral]
+      summary: Get user referral code and stats
+      responses:
+        "200":
+          description: Referral info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralInfo"
+
+  /referral/apply:
+    post:
+      operationId: applyReferral
+      tags: [referral]
+      summary: Apply a referral code during registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReferralApplyInput"
+      responses:
+        "200":
+          description: Referral applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericSuccess"
+
+  /redeem:
+    post:
+      operationId: redeemCode
+      tags: [redeem]
+      summary: Redeem a gift code for wallet credit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemInput"
+      responses:
+        "200":
+          description: Code redeemed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+
+  /redeem/generate:
+    post:
+      operationId: generateRedeemCode
+      tags: [redeem]
+      summary: Generate a gift redeem code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateCodeInput"
+      responses:
+        "201":
+          description: Code generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedeemCode"
+
+  /redeem/my-codes:
+    get:
+      operationId: listRedeemCodes
+      tags: [redeem]
+      summary: List user's generated redeem codes
+      responses:
+        "200":
+          description: Code list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RedeemCode"
+
+  /tickets:
+    get:
+      operationId: listTickets
+      tags: [tickets]
+      summary: List support tickets
+      responses:
+        "200":
+          description: Ticket list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ticket"
+    post:
+      operationId: createTicket
+      tags: [tickets]
+      summary: Create a support ticket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketInput"
+      responses:
+        "201":
+          description: Ticket created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+
+  /tickets/{ticketId}/reply:
+    post:
+      operationId: replyTicket
+      tags: [tickets]
+      summary: Reply to a support ticket
+      parameters:
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketReplyInput"
+      responses:
+        "200":
+          description: Reply sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get platform-wide stats (admin only)
+      responses:
+        "200":
+          description: Admin stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+
+  /admin/users:
+    get:
+      operationId: listUsers
+      tags: [admin]
+      summary: List all users (admin only)
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+
+  /admin/users/{uid}/balance:
+    patch:
+      operationId: adjustUserBalance
+      tags: [admin]
+      summary: Adjust a user's wallet balance (admin only)
+      parameters:
+        - in: path
+          name: uid
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BalanceAdjustInput"
+      responses:
+        "200":
+          description: Balance adjusted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericSuccess"
+
+  /admin/config:
+    get:
+      operationId: getAdminConfig
+      tags: [admin]
+      summary: Get site configuration (admin only)
+      responses:
+        "200":
+          description: Config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteConfig"
+    patch:
+      operationId: updateAdminConfig
+      tags: [admin]
+      summary: Update site configuration (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SiteConfigUpdate"
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteConfig"
+
+  /admin/sync-packages:
+    post:
+      operationId: syncPackages
+      tags: [admin]
+      summary: Manually trigger package sync from eSIMAccess (admin only)
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericSuccess"
+
+  /admin/esim-balance:
+    get:
+      operationId: getEsimAccessBalance
+      tags: [admin]
+      summary: Get eSIMAccess reseller account balance (admin only)
+      responses:
+        "200":
+          description: Balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EsimAccessBalance"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +662,488 @@ components:
       required:
         - status
 
+    Package:
+      type: object
+      required: [packageCode, name, locationCode, locationName, dataGb, durationDays, priceUsd, retailPriceUsd, flagEmoji]
+      properties:
+        packageCode:
+          type: string
+        name:
+          type: string
+        locationCode:
+          type: string
+        locationName:
+          type: string
+        dataGb:
+          type: number
+        durationDays:
+          type: integer
+        priceUsd:
+          type: number
+        retailPriceUsd:
+          type: number
+        flagEmoji:
+          type: string
+        valueScore:
+          type: number
+
+    Country:
+      type: object
+      required: [locationCode, locationName, flagEmoji, packageCount, minPriceUsd]
+      properties:
+        locationCode:
+          type: string
+        locationName:
+          type: string
+        flagEmoji:
+          type: string
+        packageCount:
+          type: integer
+        minPriceUsd:
+          type: number
+
+    OrderInput:
+      type: object
+      required: [packageCode, familyMemberId]
+      properties:
+        packageCode:
+          type: string
+        familyMemberId:
+          type: ["string", "null"]
+
+    Order:
+      type: object
+      required: [id, orderNo, packageCode, packageName, locationCode, locationName, dataGb, durationDays, priceUsd, status, createdAt]
+      properties:
+        id:
+          type: string
+        orderNo:
+          type: string
+        packageCode:
+          type: string
+        packageName:
+          type: string
+        locationCode:
+          type: string
+        locationName:
+          type: string
+        dataGb:
+          type: number
+        durationDays:
+          type: integer
+        priceUsd:
+          type: number
+        status:
+          type: string
+          enum: [pending, active, expired, error]
+        qrCodeUrl:
+          type: ["string", "null"]
+        shortUrl:
+          type: ["string", "null"]
+        iccid:
+          type: ["string", "null"]
+        ac:
+          type: ["string", "null"]
+        activateTime:
+          type: ["string", "null"]
+        expiredTime:
+          type: ["string", "null"]
+        familyMemberId:
+          type: ["string", "null"]
+        familyMemberName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    TopupInput:
+      type: object
+      required: [iccid, packageCode]
+      properties:
+        iccid:
+          type: string
+        packageCode:
+          type: string
+
+    ManageEsimInput:
+      type: object
+      required: [iccid, action]
+      properties:
+        iccid:
+          type: string
+        action:
+          type: string
+          enum: [suspend, unsuspend, revoke]
+
+    EsimSummary:
+      type: object
+      required: [totalActive, totalPending, totalExpired, totalSpentUsd]
+      properties:
+        totalActive:
+          type: integer
+        totalPending:
+          type: integer
+        totalExpired:
+          type: integer
+        totalSpentUsd:
+          type: number
+        recentCountries:
+          type: array
+          items:
+            type: string
+
+    Wallet:
+      type: object
+      required: [balanceUsd, level, levelName, totalSpentUsd, discountPercent]
+      properties:
+        balanceUsd:
+          type: number
+        level:
+          type: string
+          enum: [bronze, silver, gold, platinum]
+        levelName:
+          type: string
+        totalSpentUsd:
+          type: number
+        discountPercent:
+          type: integer
+        nextLevelSpendRequired:
+          type: ["number", "null"]
+        levelupBonusUsd:
+          type: number
+
+    Transaction:
+      type: object
+      required: [id, type, amountUsd, description, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [topup, purchase, refund, bonus, redeem]
+        amountUsd:
+          type: number
+        description:
+          type: string
+        createdAt:
+          type: string
+
+    TopupOptions:
+      type: object
+      required: [options]
+      properties:
+        options:
+          type: array
+          items:
+            type: object
+            required: [amountUsd, label]
+            properties:
+              amountUsd:
+                type: number
+              label:
+                type: string
+
+    UserProfile:
+      type: object
+      required: [uid, email, displayName, travelFrequency, referralCode, createdAt]
+      properties:
+        uid:
+          type: string
+        email:
+          type: string
+        displayName:
+          type: string
+        photoUrl:
+          type: ["string", "null"]
+        travelFrequency:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [user, admin]
+        referralCode:
+          type: string
+        createdAt:
+          type: string
+
+    ProfileUpdate:
+      type: object
+      properties:
+        displayName:
+          type: string
+        travelFrequency:
+          type: string
+
+    Badge:
+      type: object
+      required: [id, name, description, earned, earnedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        earned:
+          type: boolean
+        earnedAt:
+          type: ["string", "null"]
+
+    FamilyMember:
+      type: object
+      required: [id, name, age, avatar, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        age:
+          type: integer
+        avatar:
+          type: string
+        activeEsim:
+          $ref: "#/components/schemas/ActiveEsimInfo"
+        createdAt:
+          type: string
+
+    ActiveEsimInfo:
+      type: object
+      properties:
+        orderNo:
+          type: string
+        locationName:
+          type: string
+        dataGb:
+          type: number
+        expiredTime:
+          type: string
+        status:
+          type: string
+
+    FamilyMemberInput:
+      type: object
+      required: [name, age, avatar]
+      properties:
+        name:
+          type: string
+        age:
+          type: integer
+        avatar:
+          type: string
+
+    FamilyMemberUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        age:
+          type: integer
+        avatar:
+          type: string
+
+    ReferralInfo:
+      type: object
+      required: [referralCode, totalReferrals, totalBonusEarnedUsd]
+      properties:
+        referralCode:
+          type: string
+        totalReferrals:
+          type: integer
+        totalBonusEarnedUsd:
+          type: number
+        referrals:
+          type: array
+          items:
+            type: object
+            required: [email, joinedAt, bonusEarnedUsd]
+            properties:
+              email:
+                type: string
+              joinedAt:
+                type: string
+              bonusEarnedUsd:
+                type: number
+
+    ReferralApplyInput:
+      type: object
+      required: [referralCode]
+      properties:
+        referralCode:
+          type: string
+
+    RedeemInput:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+
+    GenerateCodeInput:
+      type: object
+      required: [amountUsd]
+      properties:
+        amountUsd:
+          type: number
+
+    RedeemCode:
+      type: object
+      required: [code, amountUsd, status, createdAt]
+      properties:
+        code:
+          type: string
+        amountUsd:
+          type: number
+        status:
+          type: string
+          enum: [active, used]
+        usedBy:
+          type: ["string", "null"]
+        usedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    Ticket:
+      type: object
+      required: [id, subject, message, status, createdAt]
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        message:
+          type: string
+        status:
+          type: string
+          enum: [pending, resolved]
+        replies:
+          type: array
+          items:
+            type: object
+            required: [message, isAdmin, createdAt]
+            properties:
+              message:
+                type: string
+              isAdmin:
+                type: boolean
+              createdAt:
+                type: string
+        createdAt:
+          type: string
+
+    TicketInput:
+      type: object
+      required: [subject, message]
+      properties:
+        subject:
+          type: string
+        message:
+          type: string
+
+    TicketReplyInput:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    AdminStats:
+      type: object
+      required: [totalUsers, totalOrders, totalRevenueUsd, activeEsims, pendingTickets]
+      properties:
+        totalUsers:
+          type: integer
+        totalOrders:
+          type: integer
+        totalRevenueUsd:
+          type: number
+        activeEsims:
+          type: integer
+        pendingTickets:
+          type: integer
+        revenueByDay:
+          type: array
+          items:
+            type: object
+            required: [date, revenueUsd]
+            properties:
+              date:
+                type: string
+              revenueUsd:
+                type: number
+
+    AdminUser:
+      type: object
+      required: [uid, email, displayName, balanceUsd, level, totalOrders, role, createdAt]
+      properties:
+        uid:
+          type: string
+        email:
+          type: string
+        displayName:
+          type: string
+        balanceUsd:
+          type: number
+        level:
+          type: string
+        totalOrders:
+          type: integer
+        role:
+          type: string
+        createdAt:
+          type: string
+
+    BalanceAdjustInput:
+      type: object
+      required: [amountUsd, reason]
+      properties:
+        amountUsd:
+          type: number
+        reason:
+          type: string
+
+    SiteConfig:
+      type: object
+      required: [siteName, markupPercent, logoUrl]
+      properties:
+        siteName:
+          type: string
+        markupPercent:
+          type: integer
+        logoUrl:
+          type: string
+        primaryColor:
+          type: string
+
+    SiteConfigUpdate:
+      type: object
+      properties:
+        siteName:
+          type: string
+        markupPercent:
+          type: integer
+        logoUrl:
+          type: string
+        primaryColor:
+          type: string
+
+    EsimAccessBalance:
+      type: object
+      required: [balanceUsd]
+      properties:
+        balanceUsd:
+          type: number
+
+    GenericSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

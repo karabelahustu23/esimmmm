@@ -1,0 +1,169 @@
+🎯 GÖREV: Vercel'e deploy edilebilecek, eSIMAccess.com API entegreli, RESELLER (bayi) modelinde çalışan tam eSIM satış platformu oluştur. Backend Firebase Cloud Functions DEĞİL, Vercel Serverless Functions olarak yazılacak.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💰 PARA AKIŞI & RESELLER MANTIĞI (KRİTİK)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ DOĞRU AKIŞ:
+1. Kullanıcı Paddle ile ödeme yapar → PARA BENİM SİTEME GELİR
+2. Ödeme onaylanınca kullanıcının site wallet bakiyesi artar
+3. Kullanıcı siteden eSIM paketi seçer → "Satın Al" der
+4. BACKEND (/api/esim/order.js) → BENİM eSIMAccess API KEY'İM ile eSIMAccess'ten satın alır
+5. eSIMAccess'ten gelen QR/LPA bilgileri Firestore'a kaydedilir ve kullanıcıya gösterilir
+6. Kullanıcının wallet bakiyesinden sipariş tutarı düşülür
+7. ARADAKİ FARK (markup) = BENİM KÂRIM
+❌ YAPILMAYACAK:
+• Kullanıcı direkt eSIMAccess'e ödeme yapmaz
+• Kullanıcı API key'leri görmez
+• eSIMAccess bakiyesi sadece benim hesabıma aittir
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📐 VERCEL MİMARİSİ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Frontend: Statik HTML/CSS/JS → Vercel static hosting
+• Backend: /api/*.js dosyaları → Vercel Serverless Functions
+• Database: Firebase Firestore (firebase-admin SDK ile serverless içinde çalıştır)
+• Cron: Vercel Cron (vercel.json içinden yapılandır)
+• Webhook: /api/webhooks/paddle.js (Paddle ödeme bildirimleri)
+• Routing: vercel.json ile SPA fallback, API routing, cache headers
+• Environment: Vercel Dashboard'tan veya .env.local üzerinden yönetilecek
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔑 eSIMACCESS API ENTEGRASYONU (DOKÜMAN: docs.esimaccess.com)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📡 ORTAK HEADERS (her istekte zorunlu):
+RT-AccessCode: process.env.ESIM_ACCESS_CODE
+Content-Type: application/json
+Not: Signature/RequestID/Timestamp gerekiyorsa crypto ile dinamik üret.
+
+📦 1) Paket Listesi:
+POST https://api.esimaccess.com/api/v1/open/package/list
+Body: { "locationCode": "", "type": "BASE" }
+• locationCode boş = tüm paketler
+• Fiyat dönüşü: price / 10000 = USD
+• Günde 2 kez Vercel Cron ile çek ve Firestore'a yaz
+
+🛒 2) Sipariş Oluşturma:
+POST https://api.esimaccess.com/api/v1/open/esim/order
+Body: { "transactionId": "crypto.randomUUID()", "amount": 15000, "packageInfoList": [{ "packageCode": "AU_1_7", "count": 1, "price": 15000 }] }
+• Başarılı yanıtta orderNo döner → Firestore orders/{uid}/{orderNo} olarak sakla
+
+📲 3) QR & Detay Sorgulama:
+POST https://api.esimaccess.com/api/v1/open/esim/query
+Body: { "orderNo": "...", "pager": { "pageNum": 1, "pageSize": 50 } }
+• Yanıt: qrCodeUrl, shortUrl, ac, iccid, esimStatus, activateTime, expiredTime
+• qrCodeUrl direkt <img src=""> olarak gösterilebilir
+
+💰 4) Bakiye Sorgulama (Admin panelinde göstereceğim):
+POST https://api.esimaccess.com/api/v1/open/balance/query
+• Body boş, yanıt: balance / 10000 = USD
+
+🔄 5) Top-Up:
+POST https://api.esimaccess.com/api/v1/open/esim/topup
+Body: { "iccid": "...", "packageCode": "...", "transactionId": "...", "amount": ... }
+
+⏸️ 6) Yönetim:
+POST /esim/suspend | /esim/unsuspend | /esim/revoke
+Body: { "iccid": "..." }
+
+⚠️ KURALLAR:
+• transactionId her siparişte crypto.randomUUID() ile benzersiz üret
+• Fiyatlar: eSIMAccess price / 10000 = USD. Ters işlem için * 10000
+• API hatalarında otomatik iade: kullanıcı wallet'ine sipariş tutarı geri yatır
+• Tüm API çağrıları /api/ içinde serverless fonksiyon olarak çalışacak
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌐 ÖZELLİKLER (VERCEL UYUMLU)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Paddle Ödeme & Wallet: Paddle webhook ile ödeme onaylanınca wallet bakiyesi güncellenecek. $10/$20/$50 + özel tutar seçeneği.
+2. Aile Menüsü: Kullanıcı aile üyesi oluşturacak (isim, yaş, avatar). Her üyeye ayrı eSIM alınabilecek. Firestore: users/{uid}/family/{memberId}
+3. Aile Kalan İnternet: Her üyenin aktif eSIM'i, kalan GB, bitiş tarihi kartta gösterilecek.
+4. Otomatik Paket Senkronizasyonu: Vercel Cron ile günde 2 kez /api/cron/sync-packages çalışacak. Admin panelinden markup % ayarı yapılabilecek.
+5. eSIMAccess API ile Satın Alma: Wallet bakiyesi kontrol edilecek, backend kendi API key'imi kullanarak eSIMAccess'ten alacak, QR kullanıcıya verilecek.
+6. Referans Sistemi: Davet edilen kullanıcı her $20 yüklediğinde davet edene $2 bonus. RefCode 6 karakter alfanümerik.
+7. Admin Panel (/admin): Site adı, logo yükleme, renk değişimi, kullanıcı bakiye/role yönetimi, markup ayarı, cron tetikleme, ticket yönetimi. Sadece role === 'admin' erişebilsin.
+8. Redeem Code: Kullanıcılar $10/$25/$50 kod üretebilecek, hediye edebilecek. Kod kullanıldığında alıcının wallet'ine eklenecek, kod passive olacak.
+9. Responsive + PWA: Bootstrap 5 grid. manifest.json + sw.js. "Ana ekrana ekle" desteği.
+10. Login/Signup: Email + Google Auth. Kayıt sonrası onboarding (isim, seyahat sıklığı vb.)
+11. i18n: TR, EN, RU, DE, FR, ES, ZH, AR, HI. js/i18n.js içinde obje tabanlı çeviri. Dropdown ile anlık değişim.
+12. Dark/Light Mode: CSS variables ile tema değişimi. localStorage'da saklanacak.
+13. Destek Ticket: Konu, mesaj, screenshot yükleme. Admin yanıtlayabilecek. Durum: pending/resolved.
+14. eSIM Kullanım Geçmişi: Ülke, tarih, GB, kalan süre, durum listesi.
+15. Sipariş Durum Yönetimi: "eSIM'lerim" sayfası açılınca pending siparişler için /api/esim/status-check çağrılacak. active olursa kart yeşile döner, QR gösterilir. Hata olursa otomatik iade.
+16. Ana Sayfa: Ülke kartları, 7/15/30 gün filtreleri, fiyat/GB oranına göre sıralama (en ucuz üstte).
+17. eSIM'lerim 3 Tab: Aktif (yeşil), Hazırlanıyor (turuncu), Geçmiş (gri).
+18. Email Bildirimi: Pending → Active geçişinde kullanıcıya e-posta (Resend/SendGrid API veya Vercel Email Integration ile).
+19. QR Kod: qrCodeUrl ile gösterim, PNG indirme butonu.
+20. Kullanıcı Seviyeleri: Bronz(%0), Gümüş(%5), Altın(%10), Platin(%15). Seviye atlama bonusu +$5.
+21. Rozetler: İlk Seyahat, Veri Canavarı(10GB+), Aile Babası(3+), Referans Ustası(5+).
+22. Logo Yükleme: Admin panelinden Firebase Storage'a yükleme, tüm header'larda dinamik gösterim.
+23. Güvenlik: Firestore Security Rules (kullanıcı sadece kendi verisi), API key'ler .env'de, CORS ayarları, serverless validation.
+24. Performans: Firestore indeksleri tanımlı, client-side 5dk cache, lazy loading.
+25. Hata Yönetimi: Dostane kullanıcı mesajları, console'da detaylı log, otomatik iade.
+26. 🚫 EMOJİ KULLANILMAYACAK. SADECE BOOTSTRAP 5.3 KULLANILACAK.
+27. Rate Limit: /api/middleware/rateLimit.js ile kullanıcı/IP başına dakikada max 100 istek. Aşımında 429 döndür.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 BEKLENEN DOSYA YAPISI (VERCEL OPTİMİZE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/
+├── vercel.json                 # Routing, cron, SPA fallback, env yönlendirme
+├── .env.example                # Tüm değişkenlerin şablonu
+├── public/
+│   ├── index.html              # Ana SPA (Bootstrap + Vanilla JS)
+│   ├── admin.html              # Admin paneli
+│   ├── css/style.css           # Tema, CSS variables, responsive
+│   ├── js/app.js               # Routing, event, UI logic
+│   ├── js/auth.js              # Firebase Auth
+│   ├── js/esim.js              # API çağrı wrapper'ları
+│   ├── js/wallet.js            # Paddle callback, bakiye yönetimi
+│   ├── js/family.js            # CRUD aile
+│   ├── js/i18n.js              # Çeviri objeleri & switcher
+│   ├── manifest.json           # PWA
+│   └── sw.js                   # Service Worker
+├── api/
+│   ├── _middleware.js          # Rate limit, CORS, auth kontrol
+│   ├── cron/sync-packages.js   # Vercel Cron hedefi
+│   ├── webhooks/paddle.js      # Ödeme onayı → wallet güncelle
+│   ├── packages/list.js        # Markup + indirimli paket döndür
+│   ├── esim/order.js           # Wallet kontrol → eSIMAccess order
+│   ├── esim/status-check.js    # pending siparişleri sorgula, QR al
+│   ├── esim/management.js      # suspend/unsuspend/revoke/topup
+│   ├── user/wallet.js          # Bakiye sorgula/refund
+│   └── admin/                  # Role check, config, user management
+├── firestore.rules             # Güvenlik kuralları
+├── storage.rules               # Firebase Storage kuralları
+└── README.md                   # Vercel deployment adımları
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 VERCEL DEPLOYMENT TALİMATLARI (README.md'ye EKLE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Replit'te proje oluştur. Tüm dosyaları yukarıdaki yapıda üret.
+2. .env.example'den .env dosyası oluştur. Aşağıdaki değişkenleri doldur:
+   FIREBASE_SERVICE_ACCOUNT_JSON=<service-account-json>
+   ESIM_ACCESS_CODE=<code>
+   ESIM_ACCESS_SECRET=<secret>
+   PADDLE_VENDOR_ID=<vendor>
+   PADDLE_SECRET_KEY=<key>
+   FIREBASE_PROJECT_ID=<project>
+3. vercel.json içindeki cron ve routing yapılandırmasını kontrol et.
+4. Vercel CLI kur: npm i -g vercel
+5. Deploy: vercel login → vercel --prod
+6. Vercel Dashboard > Settings > Environment Variables'tan tüm .env değerlerini ekle.
+7. Firestore Security Rules ve Storage Rules'ı Firebase Console'a yükle.
+8. Paddle Webhook URL'sini https://<domain>.vercel.app/api/webhooks/paddle olarak ayarla.
+9. Vercel Cron aktif olacak. Paket senkronizasyonu otomatik çalışacak.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 ÜRETİM KURALLARI (AI İÇİN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Tüm backend mantığı /api/ klasöründe Vercel Serverless Functions olarak yazılacak.
+• Firebase Admin SDK sadece serverless içinde import edilecek. Client-side'da asla kullanılmayacak.
+• E-posta gönderimi için Resend veya Vercel Email API entegre edilecek.
+• Paddle ödeme doğrulaması webhook içinde imza kontrolü ile yapılacak.
+• Her /api/*.js dosyası export default async function(req, res) formatında olacak.
+• Hata yönetimi: try/catch, res.status(4xx/5xx).json({ error: "dostane mesaj" })
+• Rate limiting middleware her API çağrısında çalışacak.
+• 🚫 KESİNLİKLE EMOJİ KULLANMA. SADECE BOOTSTRAP + VANILLA JS.
+• Kodlar production-ready, yorumlu, modüler ve Vercel'de sorunsuz çalışacak şekilde üretilecek.
+
+Şimdi dosyaları sırasıyla, tam çalışır halde, yorumlarla açıklayarak üretmeye başla.
