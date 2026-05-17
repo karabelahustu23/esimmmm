@@ -5,27 +5,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLocation } from "wouter";
 import { useState } from "react";
-import { Globe2 } from "lucide-react";
+import { Globe2, Loader2 } from "lucide-react";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginError } = useAuth();
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
+  const [isPending, setIsPending] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
-    const role = email.includes("admin") ? "admin" : "user";
-    login(email, role);
-    setLocation("/");
+    if (!email || isPending) return;
+    setIsPending(true);
+    try {
+      await login(email);
+      setLocation("/");
+    } catch {
+      // loginError is set inside auth context
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 relative overflow-hidden">
-      {/* Decorative background elements */}
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-primary/20 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-secondary/30 rounded-full blur-3xl pointer-events-none"></div>
-      
+
       <div className="z-10 flex flex-col items-center mb-8">
         <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-primary/25">
           <Globe2 className="w-8 h-8 text-primary-foreground" />
@@ -43,35 +49,35 @@ export default function Login() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="traveler@example.com" 
+              <Input
+                id="email"
+                type="email"
+                placeholder="traveler@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isPending}
                 className="h-12 bg-background"
               />
             </div>
-            <Button type="submit" className="w-full h-12 text-lg mt-2">
-              Sign In
+
+            {loginError && (
+              <p className="text-sm text-destructive text-center">{loginError}</p>
+            )}
+
+            <Button type="submit" className="w-full h-12 text-lg mt-2" disabled={isPending}>
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
-              </div>
-            </div>
-            <Button type="button" variant="outline" className="w-full h-12 bg-background hover:bg-secondary">
-              <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
-                <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
-              </svg>
-              Google
-            </Button>
+
             <p className="text-xs text-center text-muted-foreground mt-6">
-              Use "admin@example.com" to test admin features.
+              Your access level is determined by your account role.
             </p>
           </form>
         </CardContent>

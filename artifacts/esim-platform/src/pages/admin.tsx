@@ -6,22 +6,25 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Users, DollarSign, RefreshCw, Settings as SettingsIcon, ShieldAlert } from "lucide-react";
+import { Users, DollarSign, RefreshCw, Settings as SettingsIcon, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
+import { useAuth } from "@/lib/auth";
 
 export default function Admin() {
   const { data: stats, isLoading: isStatsLoading } = useGetAdminStats();
   const { data: users, isLoading: isUsersLoading, refetch: refetchUsers } = useListUsers();
   const { data: config, isLoading: isConfigLoading, refetch: refetchConfig } = useGetAdminConfig();
   const { data: accessBalance } = useGetEsimAccessBalance();
-  
+  const { user: currentUser } = useAuth();
+
   const adjustBalance = useAdjustUserBalance();
   const updateConfig = useUpdateAdminConfig();
   const syncPackages = useSyncPackages();
   const { toast } = useToast();
+  const [roleChanging, setRoleChanging] = useState<string | null>(null);
 
   const [siteName, setSiteName] = useState("");
   const [markupPercent, setMarkupPercent] = useState("");
@@ -72,6 +75,32 @@ export default function Admin() {
         refetchUsers();
       }
     });
+  };
+
+  const handleRoleChange = async (uid: string, currentRole: string) => {
+    const newRole = currentRole === "admin" ? "user" : "admin";
+    setRoleChanging(uid);
+    try {
+      const res = await fetch(`/api/admin/users/${uid}/role`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${currentUser?.uid}`,
+        },
+        body: JSON.stringify({ role: newRole }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast({ title: "Error", description: err.error, variant: "destructive" });
+      } else {
+        toast({ title: `User is now ${newRole}` });
+        refetchUsers();
+      }
+    } catch {
+      toast({ title: "Request failed", variant: "destructive" });
+    } finally {
+      setRoleChanging(null);
+    }
   };
 
   const StatCard = ({ title, value, icon: Icon, isLoading }: any) => (
@@ -157,9 +186,29 @@ export default function Admin() {
                         <TableCell className="text-sm text-muted-foreground">{format(new Date(user.createdAt), 'MMM dd, yyyy')}</TableCell>
                         <TableCell className="text-right font-mono font-medium">${user.balanceUsd.toFixed(2)}</TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm" onClick={() => { setSelectedUser(user); setAdjustOpen(true); }}>
-                            Adjust Balance
-                          </Button>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setSelectedUser(user); setAdjustOpen(true); }}
+                            >
+                              Adjust Balance
+                            </Button>
+                            {user.uid !== currentUser?.uid && (
+                              <Button
+                                variant={user.role === "admin" ? "destructive" : "secondary"}
+                                size="sm"
+                                disabled={roleChanging === user.uid}
+                                onClick={() => handleRoleChange(user.uid, user.role)}
+                                title={user.role === "admin" ? "Remove admin" : "Make admin"}
+                              >
+                                {user.role === "admin"
+                                  ? <><ShieldOff className="w-3 h-3 mr-1" />Remove Admin</>
+                                  : <><ShieldCheck className="w-3 h-3 mr-1" />Make Admin</>
+                                }
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

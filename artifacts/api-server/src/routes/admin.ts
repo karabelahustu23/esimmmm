@@ -200,6 +200,34 @@ router.post("/admin/sync-packages", requireAdmin, async (req, res): Promise<void
   }
 });
 
+router.patch("/admin/users/:uid/role", requireAdmin, async (req, res): Promise<void> => {
+  const { uid } = req.params;
+  const { role } = req.body as { role: string };
+
+  if (role !== "admin" && role !== "user") {
+    res.status(400).json({ error: "Role must be 'admin' or 'user'" });
+    return;
+  }
+
+  if (uid === req.authUser!.uid) {
+    res.status(400).json({ error: "Cannot change your own role" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(usersTable)
+    .set({ role: role as "admin" | "user" })
+    .where(eq(usersTable.uid, uid))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  res.json({ success: true, uid: updated.uid, role: updated.role });
+});
+
 router.get("/admin/esim-balance", requireAdmin, async (req, res): Promise<void> => {
   try {
     const balanceUsd = await getBalance();
